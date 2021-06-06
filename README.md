@@ -9,9 +9,9 @@ Host at home with more security.
 
 ## Reasons
 ### 🕵️ Hidden IP
-When hosting on Sia, your IP will be public.  
-And if this is your private IP, you might get DDoSed at home.  
-This might result in the loss of your private internet, and believe me,
+When hosting on Sia, your IP will be on a public list.  
+And if this is your private internet connection, you might get DDoSed at home.  
+This might result in the loss of your internet at home, and believe me,
 it sucks to have no internet for multiple days.
 
 ### 🔥 Configurable Firewall
