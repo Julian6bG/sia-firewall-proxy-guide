@@ -24,15 +24,15 @@ By using a VPS in a datacenter you can usually receive much more traffic
 than by using a home server.  
 This is why it is helpful to receive the traffic there, drop that bad traffic
 and tunnel the good traffic to your sia host at home (theoretically).  
-_This is really, really limited. If there is a real DDoS, you would are down._  
-But, only your proxy VPS would go down, and not your Sia host / home network.
+_This is really, really limited. If there is a real DDoS, you go down._  
+Nevertheless, only your proxy VPS would be affected,
+while your internet at home continues to work.
 
 
-## Requirements and Conditions
-This guide assumes hosting on a Linux machine.  
-You also need a VPS (Debian is the most easy OS to handle).  
-It might go done, so it should be dedicated for this purpose.  
-It needs an IPv4 address and enough traffic.
+## Requirements
+- Sia is running on a Linux server
+- A VPS (Debian recommended)
+- VPS should have a static IPv4 and LOTS OF traffic
 
 
 ## Guide
@@ -45,22 +45,29 @@ It needs an IPv4 address and enough traffic.
 7. [Autostart considerations](#Autostart-considerations)
 
 ### Configure open ports of your home router
-You are here, so you probably know how to do this.  
-Set up some open ports, that get redirected to your Sia host.  
-I recommend using not the original `9981`-`9984` but higher ports like
-`29981`-`29981`.  
-Configure them to be redirected to `9981`-`9984` on your Sia host, or configure
-the Sia host to listen to these new ports.
+Open ports of your choice, that get forwarded to your Sia host in your local network.  
+I recommend using not the original `9981`-`9984` range, but higher ports like
+`29981`-`29984`.  
+
+Configure them to be forwarded to `9981`-`9984` on your Sia host, or configure
+the Sia host to listen to the new chosen ports.
+
+Example:  
+`Router 2998X <-> 998X Sia host`  
+(9981 to 9984)
+
+[How to forward ports on your router](https://www.purevpn.com/blog/how-to-forward-ports-on-your-router/)
 
 ### Configure reverse proxy
 We will use nginx as a reverse proxy.  
-Install nginx.  
+
+__Step 1) Install nginx__ 
 `sudo apt install nginx`
 
-Edit the configuration.  
+__Step 2) Edit the configuration__  
 `sudo nano /etc/nginx/nginx.conf`  
 The target ports depend on your choice from earlier.  
-I continue to go with `29981`-`29981`.
+I continue to go with my example port range of `29981`-`29984`.
 Enter the following `stream` block above or under the `http` block.  
 
 ```conf
@@ -86,31 +93,36 @@ stream {
 }
 # [...]
 ```
+
+__Step 3) Reload config__
 ```bash
 # Test whether your config is valid
 nginx -t
 # Reload config
-sudo service nginx restart
+sudo service nginx reload
 ```
-You know a more elegant way than this? - Great! Open an issue or a pull request.
+You know a more elegant way than using nginx? - Great! Open an issue or a pull request.
 
 
-__Test the configuration__
+__Step 4) Test__
 ```bash
 # Run this on your Sia host
-# Sia must be down for this one, so 9981 is free
-nc -l 9981  # Change port if Sia should listen to another one
+# Sia must be down for this one, so that port 9981 is free
+nc -l 9981  # Change 9981 if you configure Sia to listen on a custom port.
 ```
 ```bash
 # Run this on your VPS
 echo sending text to the sia server... | nc 127.0.0.1 9981
 ```
-The text should appear on your Sia terminal running the `nc` command.
+If everything works properly the text should appear on your Sia terminal running the `nc` command.
 
 ### Configure forward proxy SSH
 We will use SSH as forward proxy.  
-For this, ensure you can login onto your VPS via SSH without a password.
 
+We will configure SSH login onto your VPS via SSH using a public key,
+so no password is required.
+
+__1) Generate SSH public key__
 ```bash
 # Run this on your Sia host
 # Skip this if you already have an SSH public key
@@ -119,10 +131,12 @@ ssh-keygen  # Press Enter until you are through
 # Now copy the public key
 cat ~/.ssh/id_rsa.pub
 ```
+
+__2) Create configuration__
 Create a SSH configuration entry on your Sia host.  
 ```
 # On Sia host
-# ~/.ssh/config
+# File ~/.ssh/config
 
 # Append this:
 Host mysiaproxy
@@ -131,13 +145,14 @@ Host mysiaproxy
     HostName vps.domain.tld.or.ip.address
 ```
 
-Now you can SSH onto your proxy VPS by going `ssh mysiaproxy`.  
-Next, append the public ssh key of the sia host to the file `~.ssh/authorized_keys` 
+__3) Deploy SSH public key__
+Now you can SSH onto your proxy VPS by running `ssh mysiaproxy`.  
+Next, append the public SSH key of the Sia host to the file `~.ssh/authorized_keys` 
 on your VPS.  
-After having done that, you should be able to run `ssh mysiaproxy` on you sia host
+
+__4) Test__
+After having deployed the public key, you should be able to run `ssh mysiaproxy` on you sia host
 without entering a password.  
-Run `ssh mysiaproxy` on your Sia host. You should enter the shell without
-requiring a password.
 
 Run on your Sia host:  
 ```bash
@@ -146,15 +161,17 @@ ssh -TNfnqD 9999 mysiaproxy
 [SSH command line parameters](https://www.ssh.com/academy/ssh/command)
 
 This starts the forward proxy in the background.  
-Validate that at least one `ssh` instace is running by calling `pidfof ssh`.
+Validate that at least one `ssh` instance is running by calling `pidfof ssh`.
 
 ### Configure forward proxy proxychains
-Install proxychains. This tool forces a process to use a internet proxy.
+__1) Install proxychains__
+Install proxychains. This tool forces a process to use an internet proxy.
 ```bash
 # Run this on your Sia host
 sudo apt install proxychains
 ```
 
+__2) Configure proxychains__
 Edit the proxychains configuration:
 ```conf
 # stuff
@@ -170,8 +187,7 @@ localnet 127.0.0.0/255.0.0.0
 socks4 127.0.0.1 9999  # port from ssh -D 9999
 ```
 
-
-_Test configuration_  
+__3) Test proxychains__
 ```bash
 # Run on your Sia host
 proxychains curl https://api.ipify.org
@@ -197,8 +213,8 @@ bash firewall-ip-table-rules.sh
 pidof ssh
 
 # Check if the proxy works
-proxychains curl https://api.ipify.org
 # The printed IP should be the public IP of your VPS proxy
+proxychains curl https://api.ipify.org
 
 # Start your Sia server
 proxychains siad --your-parameters-as-usual
